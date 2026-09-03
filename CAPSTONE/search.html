@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+const content = renderShell("search.html", "Advanced Search", "Filter across every lost and found record on campus.");
+content.innerHTML = `
+  <div class="panel panel-pad" style="margin-bottom:18px">
+    <div class="filter-bar">
+      <div class="field"><label>Keyword</label><input type="text" id="q" placeholder="item name…"></div>
+      <div class="field"><label>Type</label><select id="type"><option value="">Lost + Found</option><option value="LOST">Lost</option><option value="FOUND">Found</option></select></div>
+      <div class="field"><label>Category</label><input type="text" id="category"></div>
+      <div class="field"><label>Color</label><input type="text" id="color"></div>
+      <div class="field"><label>Location</label><input type="text" id="location"></div>
+      <div class="field"><label>Status</label>
+        <select id="status"><option value="">Any</option><option>ACTIVE</option><option>MATCHED</option><option>RETURNED</option></select>
+      </div>
+      <div class="field"><label>Sort by</label>
+        <select id="sortBy"><option value="date">Date</option><option value="itemName">Item Name</option><option value="category">Category</option><option value="status">Status</option></select>
+      </div>
+      <button class="btn btn-primary" id="searchBtn">Search</button>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-pad" style="padding:0">
+      <table><thead><tr><th>ID</th><th>Type</th><th>Item</th><th>Category</th><th>Color</th><th>Location</th><th>Date</th><th>Status</th></tr></thead>
+      <tbody id="resultsBody"><tr><td colspan="8" class="muted" style="padding:20px">Enter filters and search.</td></tr></tbody></table>
+    </div>
+  </div>
+`;
+
+async function runSearch() {
+  const p = new URLSearchParams();
+  const q = document.getElementById("q").value.trim(); if (q) p.set("q", q);
+  const type = document.getElementById("type").value; if (type) p.set("type", type);
+  const category = document.getElementById("category").value.trim(); if (category) p.set("category", category);
+  const color = document.getElementById("color").value.trim(); if (color) p.set("color", color);
+  const location = document.getElementById("location").value.trim(); if (location) p.set("location", location);
+  const status = document.getElementById("status").value; if (status) p.set("status", status);
+  p.set("sortBy", document.getElementById("sortBy").value);
+
+  const results = await api("/search?" + p.toString());
+  const sortBy = document.getElementById("sortBy").value;
+  results.sort((a,b) => {
+    if (sortBy === "date") return (b.date||"").localeCompare(a.date||"");
+    return (a[sortBy]||"").localeCompare(b[sortBy]||"");
+  });
+
+  const body = document.getElementById("resultsBody");
+  if (!results.length) { body.innerHTML = `<tr><td colspan="8" style="padding:24px"><div class="empty-state"><div class="es-icon">&#8981;</div><h4>No records match</h4></div></td></tr>`; return; }
+  body.innerHTML = results.map(it => `
+    <tr>
+      <td class="mono">${it.itemId}</td>
+      <td><span class="badge ${it.type==='LOST' ? 'badge-unlikely' : 'badge-strong'}">${it.type}</span></td>
+      <td>${escapeHtml(it.itemName)}</td>
+      <td>${escapeHtml(it.category)}</td>
+      <td>${escapeHtml(it.color)}</td>
+      <td>${escapeHtml(it.location)}</td>
+      <td class="mono">${it.date}</td>
+      <td><span class="badge ${statusBadgeClass(it.status)}">${it.status}</span></td>
+    </tr>`).join("");
+}
+document.getElementById("searchBtn").addEventListener("click", () => runSearch().catch(e => toast(e.message,"error")));
+runSearch().catch(()=>{});
+</script>
+</body>
+</html>

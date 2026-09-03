@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notifications — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+const content = renderShell("notifications.html", "Notifications", "Stored alerts — not just temporary pop-ups.");
+content.innerHTML = `<div class="panel" id="panelBody"><div class="panel-pad muted">Loading…</div></div>`;
+
+async function load() {
+  const notifs = await api("/notifications?userId=" + encodeURIComponent(Auth.user.userId));
+  const body = document.getElementById("panelBody");
+  if (!notifs.length) { body.innerHTML = `<div class="panel-pad"><div class="empty-state"><div class="es-icon">&#128276;</div><h4>No notifications</h4></div></div>`; return; }
+  body.innerHTML = notifs.slice().reverse().map(n => `
+    <div class="panel-pad" style="border-bottom:1px solid var(--line); ${n.isRead?'':'background:#fbf9f2'}">
+      <div class="flex-between">
+        <div>
+          <div style="font-weight:700;font-size:13.5px">${n.isRead?'':'🔔 '}${escapeHtml(n.title)}</div>
+          <div class="muted" style="font-size:12.5px;margin-top:2px">${escapeHtml(n.message)}</div>
+          <div class="mono muted" style="font-size:11px;margin-top:6px">${escapeHtml(n.createdAt)} · ${n.relatedId}</div>
+        </div>
+        ${n.isRead ? "" : `<button class="btn btn-sm btn-outline mark-read" data-id="${n.notifId}">Mark read</button>`}
+      </div>
+    </div>`).join("");
+  document.querySelectorAll(".mark-read").forEach(btn => btn.addEventListener("click", async () => {
+    await api(`/notifications/${btn.dataset.id}/read`, { method: "PUT" });
+    load();
+  }));
+}
+load().catch(e => toast(e.message, "error"));
+</script>
+</body>
+</html>

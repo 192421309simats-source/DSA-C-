@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+const content = renderShell("dashboard.html", "Welcome back, " + Auth.user.name.split(" ")[0], "Here's what's happening with your reports.");
+
+content.innerHTML = `
+  <div class="stat-grid" id="statGrid">
+    ${[1,2,3,4].map(()=> `<div class="stat-card"><div class="stat-num">—</div><div class="stat-label">Loading</div></div>`).join("")}
+  </div>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-head"><h3>Smart Match Alerts</h3><a href="smart-matching.html" class="btn btn-sm btn-outline">View all</a></div>
+      <div class="panel-pad" id="matchAlerts"><div class="muted">Loading matches…</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Recovery Activity</h3><a href="history.html" class="btn btn-sm btn-outline">Full history</a></div>
+      <div class="panel-pad" id="activityFeed"><div class="muted">Loading activity…</div></div>
+    </div>
+  </div>
+`;
+
+async function load() {
+  const uid = Auth.user.userId;
+  try {
+    const stats = await api("/dashboard?userId=" + encodeURIComponent(uid));
+    document.getElementById("statGrid").innerHTML = `
+      <div class="stat-card"><div class="stat-num">${stats.totalLost}</div><div class="stat-label">Lost Reports</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.totalFound}</div><div class="stat-label">Found Registered</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.activeMatches}</div><div class="stat-label">Active Matches</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.returnedItems}</div><div class="stat-label">Items Returned</div></div>
+    `;
+  } catch (e) { toast(e.message, "error"); }
+
+  try {
+    const myLost = await api("/lost?userId=" + encodeURIComponent(uid));
+    const active = myLost.filter(i => i.status === "ACTIVE");
+    let alertsHtml = "";
+    for (const item of active.slice(0, 4)) {
+      const matches = await api("/matches/" + item.itemId);
+      if (matches.length && matches[0].score >= 40) {
+        const m = matches[0];
+        alertsHtml += `
+          <div class="match-card">
+            ${scoreRingSVG(m.score, 56)}
+            <div class="mc-body">
+              <div class="mc-title">${escapeHtml(item.itemName)}</div>
+              <div class="mc-meta"><span class="badge ${confidenceBadgeClass(m.confidence)}">${m.confidence}</span></div>
+            </div>
+            <a class="btn btn-sm btn-primary" href="match-details.html?lostId=${item.itemId}&foundId=${m.targetId}">View Match</a>
+          </div>`;
+      }
+    }
+    document.getElementById("matchAlerts").innerHTML = alertsHtml || `<div class="empty-state"><div class="es-icon">&#10022;</div><h4>No matches yet</h4><div>Once a found item matches your report, it'll show up here.</div></div>`;
+  } catch (e) { document.getElementById("matchAlerts").innerHTML = `<div class="muted">Could not load matches.</div>`; }
+
+  try {
+    const hist = await api("/history");
+    const mine = hist.slice(-8).reverse();
+    document.getElementById("activityFeed").innerHTML = mine.length ? `
+      <div class="timeline">
+        ${mine.map(h => `<div class="tl-item"><div class="tl-time">${escapeHtml(h.timestamp)}</div><div class="tl-text">${escapeHtml(h.eventText)}</div></div>`).join("")}
+      </div>` : `<div class="empty-state"><div class="es-icon">&#8635;</div><h4>No activity yet</h4></div>`;
+  } catch (e) { document.getElementById("activityFeed").innerHTML = `<div class="muted">Could not load activity.</div>`; }
+}
+load();
+</script>
+</body>
+</html>

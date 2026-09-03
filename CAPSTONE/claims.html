@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claims — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const content = renderShell("claims.html", "Claims", "OwnerVerify separately scores ownership confidence — a match is never approved automatically.");
+
+const shell = `
+  <div id="newClaimArea"></div>
+  <div class="panel">
+    <div class="panel-head"><h3>${Auth.isAdmin() ? "All Claims" : "My Claims"}</h3></div>
+    <div class="panel-pad" style="padding:0">
+      <table id="claimsTable"><thead><tr>
+        <th>Claim</th><th>Item</th><th>Match</th><th>Ownership</th><th>Status</th><th></th>
+      </tr></thead><tbody id="claimsBody"><tr><td colspan="6" class="muted" style="padding:20px">Loading…</td></tr></tbody></table>
+    </div>
+  </div>
+`;
+content.innerHTML = shell;
+
+if (params.get("action") === "new" && params.get("lostId") && params.get("foundId")) {
+  renderNewClaimForm(params.get("lostId"), params.get("foundId"));
+}
+
+async function renderNewClaimForm(lostId, foundId) {
+  const area = document.getElementById("newClaimArea");
+  area.innerHTML = `
+    <div class="panel panel-pad" style="margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">OwnerVerify — Prove Ownership</div>
+      <p class="muted" style="font-size:13px">Answer without looking at the found item's public listing. Your answers are compared against the real record.</p>
+      <form id="claimForm">
+        <div class="field"><label>Approximate time you lost the item</label><input type="text" id="ans_timeDate" placeholder="e.g. 18-08-2026 around 2:30 PM"></div>
+        <div class="field"><label>Exact / nearby location</label><input type="text" id="ans_location" placeholder="e.g. Library"></div>
+        <div class="field"><label>What unique mark does the item have?</label><input type="text" id="ans_uniqueFeature" placeholder="e.g. broken zipper on front pocket"></div>
+        <div class="field"><label>Describe the item in detail (contents, brand, color, etc.)</label><textarea id="ans_itemDetails"></textarea></div>
+        <div class="field"><label>Any other supporting information</label><textarea id="ans_userInfo" placeholder="Purchase receipt, photos you have, who saw you with it, etc."></textarea></div>
+        <button type="submit" class="btn btn-primary">Submit Claim</button>
+      </form>
+    </div>`;
+  document.getElementById("claimForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api("/claims", { method: "POST", body: JSON.stringify({
+        lostItemId: lostId, foundItemId: foundId,
+        verificationAnswers: {
+          timeDate: document.getElementById("ans_timeDate").value.trim(),
+          location: document.getElementById("ans_location").value.trim(),
+          uniqueFeature: document.getElementById("ans_uniqueFeature").value.trim(),
+          itemDetails: document.getElementById("ans_itemDetails").value.trim(),
+          userInfo: document.getElementById("ans_userInfo").value.trim()
+        }
+      })});
+      toast("Claim " + res.claim.claimId + " submitted — ownership score " + res.claim.ownershipScore + "%", "success");
+      area.innerHTML = "";
+      loadClaims();
+    } catch (err) { toast(err.message, "error"); }
+  });
+}
+
+async function loadClaims() {
+  const uid = Auth.user.userId;
+  const isAdmin = Auth.isAdmin();
+  const list = await api("/claims" + (isAdmin ? "" : "?userId=" + encodeURIComponent(uid)));
+  const body = document.getElementById("claimsBody");
+  if (!list.length) { body.innerHTML = `<tr><td colspan="6" style="padding:24px"><div class="empty-state"><div class="es-icon">&#9993;</div><h4>No claims yet</h4></div></td></tr>`; return; }
+  body.innerHTML = list.slice().reverse().map(c => `
+    <tr>
+      <td class="mono">${c.claimId}</td>
+      <td>${c.lostItemId} &harr; ${c.foundItemId}</td>
+      <td>${c.matchScore}%</td>
+      <td>${c.ownershipScore >= 0 ? c.ownershipScore + "%" : "—"}</td>
+      <td><span class="badge ${statusBadgeClass(c.status.toUpperCase())}">${c.status}</span></td>
+      <td>${adminActions(c, isAdmin)}</td>
+    </tr>
+  `).join("");
+
+  body.querySelectorAll("button[data-action]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const action = btn.dataset.action, id = btn.dataset.id;
+      try {
+        await api(`/claims/${id}/${action}`, { method: "PUT", body: JSON.stringify({}) });
+        toast("Claim moved to " + action, "success");
+        loadClaims();
+      } catch (err) { toast(err.message, "error"); }
+    });
+  });
+}
+
+function adminActions(c, isAdmin) {
+  if (!isAdmin) return "";
+  const s = c.status;
+  let btns = "";
+  if (s === "Pending") btns += `<button class="btn btn-sm btn-outline" data-action="review" data-id="${c.claimId}">Review</button> `;
+  if (s === "Under Review" || s === "Pending") {
+    btns += `<button class="btn btn-sm btn-primary" data-action="approve" data-id="${c.claimId}">Approve</button> `;
+    btns += `<button class="btn btn-sm btn-danger" data-action="reject" data-id="${c.claimId}">Reject</button>`;
+  }
+  if (s === "Approved") btns += `<button class="btn btn-sm btn-primary" data-action="return" data-id="${c.claimId}">Mark Returned</button>`;
+  return btns;
+}
+
+loadClaims().catch(e => toast(e.message, "error"));
+</script>
+</body>
+</html>

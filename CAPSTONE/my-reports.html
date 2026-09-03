@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Reports — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+const content = renderShell("search.html", "My Reports", "Every lost report and found registration you've submitted.");
+content.innerHTML = `
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-head"><h3>Lost Reports</h3><a href="report-lost.html" class="btn btn-sm btn-primary">+ New</a></div>
+    <div class="panel-pad" style="padding:0"><table><thead><tr><th>ID</th><th>Item</th><th>Location</th><th>Date</th><th>Status</th></tr></thead>
+    <tbody id="lostBody"><tr><td colspan="5" class="muted" style="padding:16px">Loading…</td></tr></tbody></table></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h3>Found Registrations</h3><a href="register-found.html" class="btn btn-sm btn-primary">+ New</a></div>
+    <div class="panel-pad" style="padding:0"><table><thead><tr><th>ID</th><th>Item</th><th>Location</th><th>Date</th><th>Status</th></tr></thead>
+    <tbody id="foundBody"><tr><td colspan="5" class="muted" style="padding:16px">Loading…</td></tr></tbody></table></div>
+  </div>
+`;
+
+function rows(items) {
+  return items.length ? items.slice().reverse().map(it => `
+    <tr>
+      <td class="mono">${it.itemId}</td><td>${escapeHtml(it.itemName)}</td>
+      <td>${escapeHtml(it.location)}</td><td class="mono">${it.date}</td>
+      <td><span class="badge ${statusBadgeClass(it.status)}">${it.status}</span></td>
+    </tr>`).join("") : `<tr><td colspan="5" class="muted" style="padding:16px">None yet.</td></tr>`;
+}
+
+async function load() {
+  const uid = Auth.user.userId;
+  const [lost, found] = await Promise.all([api("/lost?userId="+uid), api("/found?userId="+uid)]);
+  document.getElementById("lostBody").innerHTML = rows(lost);
+  document.getElementById("foundBody").innerHTML = rows(found);
+}
+load().catch(e => toast(e.message, "error"));
+</script>
+</body>
+</html>

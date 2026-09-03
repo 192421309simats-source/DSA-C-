@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Console — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .admin-topband {
+    background: linear-gradient(120deg, var(--ink) 0%, #2a2118 100%);
+    color: #f3ede0;
+    padding: 22px 28px;
+    margin: -26px -28px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .admin-topband .a-title { font-family: var(--serif); font-size: 22px; font-weight: 600; }
+  .admin-topband .a-sub { font-size: 12.5px; color: #c9bfa8; margin-top: 3px; }
+  .admin-pill { background: var(--amber); color: #2a1e08; font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; padding: 4px 11px; border-radius: 20px; }
+
+  .admin-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .admin-tab { padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--ink-soft); cursor: pointer; border-bottom: 2px solid transparent; }
+  .admin-tab.active { color: var(--ink); border-bottom-color: var(--amber); }
+  .admin-section { display: none; }
+  .admin-section.active { display: block; }
+
+  .queue-item { display:flex; align-items:center; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 10px; background:#fff; }
+  .queue-item .q-priority { font-family: var(--serif); font-weight: 700; font-size: 20px; width: 44px; text-align:center; }
+  .queue-item .q-body { flex: 1; min-width:0; }
+  .queue-item .q-title { font-weight: 700; font-size: 13.5px; }
+  .queue-item .q-meta { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+
+  .record-filters { display:flex; gap:8px; margin-bottom: 14px; }
+  .record-filters button { border:1px solid var(--line); background:#fff; padding: 6px 13px; border-radius: 20px; font-size: 12px; font-weight:600; cursor:pointer; color: var(--ink-soft); }
+  .record-filters button.active { background: var(--ink); color:#fff; border-color: var(--ink); }
+</style>
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+if (!Auth.isAdmin()) { window.location.href = "dashboard.html"; }
+const content = renderShell("admin.html", "", "");
+content.innerHTML = `
+  <div class="admin-topband">
+    <div>
+      <div class="a-title">Administrator Console</div>
+      <div class="a-sub">Full record visibility · claim oversight · recovery triage</div>
+    </div>
+    <span class="admin-pill">Admin Access</span>
+  </div>
+
+  <div class="stat-grid" id="statGrid"></div>
+
+  <div class="admin-tabs">
+    <div class="admin-tab active" data-tab="queue">Claims Needing Review</div>
+    <div class="admin-tab" data-tab="priority">Recovery Priority</div>
+    <div class="admin-tab" data-tab="records">All Records</div>
+  </div>
+
+  <div class="admin-section active" id="tab-queue">
+    <div class="panel">
+      <div class="panel-head"><h3>Pending &amp; Under Review Claims</h3><a href="claims.html" class="btn btn-sm btn-outline">Open Claims page</a></div>
+      <div class="panel-pad" id="queueBody"><div class="muted">Loading…</div></div>
+    </div>
+  </div>
+
+  <div class="admin-section" id="tab-priority">
+    <div class="panel">
+      <div class="panel-head"><h3>Recovery Priority Ranking</h3></div>
+      <div class="panel-pad" id="priorityBody"><div class="muted">Loading…</div></div>
+    </div>
+  </div>
+
+  <div class="admin-section" id="tab-records">
+    <div class="panel">
+      <div class="panel-head"><h3>Every Lost &amp; Found Record</h3></div>
+      <div class="panel-pad">
+        <div class="record-filters" id="recordFilters">
+          <button data-f="ALL" class="active">All</button>
+          <button data-f="LOST">Lost</button>
+          <button data-f="FOUND">Found</button>
+        </div>
+        <div id="recordsBody"><div class="muted">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+`;
+
+document.querySelectorAll(".admin-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".admin-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".admin-section").forEach(s => s.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+  });
+});
+
+let allRecords = [];
+
+async function load() {
+  const dash = await api("/dashboard");
+  document.getElementById("statGrid").innerHTML = `
+    <div class="stat-card"><div class="stat-num">${dash.totalLost}</div><div class="stat-label">Total Lost</div></div>
+    <div class="stat-card"><div class="stat-num">${dash.totalFound}</div><div class="stat-label">Total Found</div></div>
+    <div class="stat-card"><div class="stat-num">${dash.pendingClaims}</div><div class="stat-label">Pending Claims</div></div>
+    <div class="stat-card"><div class="stat-num">${dash.recoveryRate}%</div><div class="stat-label">Recovery Rate</div></div>
+  `;
+
+  const claims = await api("/claims");
+  const queue = claims.filter(c => c.status === "Pending" || c.status === "Under Review");
+  const qBody = document.getElementById("queueBody");
+  qBody.innerHTML = queue.length ? queue.map(c => `
+    <div class="queue-item">
+      <div class="q-priority mono">${c.matchScore}%</div>
+      <div class="q-body">
+        <div class="q-title">${c.claimId} <span class="muted" style="font-weight:400">— ${c.lostItemId} &harr; ${c.foundItemId}</span></div>
+        <div class="q-meta">Ownership: ${c.ownershipScore >= 0 ? c.ownershipScore + "%" : "not yet verified"} · Status: ${c.status}</div>
+      </div>
+      ${c.status === "Pending" ? `<button class="btn btn-sm btn-outline" data-action="review" data-id="${c.claimId}">Review</button>` : ""}
+      <button class="btn btn-sm btn-primary" data-action="approve" data-id="${c.claimId}">Approve</button>
+      <button class="btn btn-sm btn-danger" data-action="reject" data-id="${c.claimId}">Reject</button>
+    </div>
+  `).join("") : `<div class="empty-state"><div class="es-icon">&#9993;</div><h4>Queue is clear</h4><div>No claims are waiting on a decision.</div></div>`;
+
+  qBody.querySelectorAll("button[data-action]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try {
+        await api(`/claims/${btn.dataset.id}/${btn.dataset.action}`, { method: "PUT", body: JSON.stringify({}) });
+        toast("Updated", "success");
+        load();
+      } catch (e) { toast(e.message, "error"); }
+    });
+  });
+
+  const priority = await api("/priority");
+  document.getElementById("priorityBody").innerHTML = priority.length ? priority.map(p => `
+    <div class="queue-item">
+      <span class="badge ${p.label==='HIGH'?'badge-unlikely':p.label==='MEDIUM'?'badge-possible':'badge-active'}">${p.label}</span>
+      <div class="q-body"><div class="q-title">${escapeHtml(p.itemName)}</div><div class="q-meta mono">${p.itemId} · best match ${p.bestMatchScore}%</div></div>
+      <div class="mono" style="font-weight:700;font-size:18px">${p.priority}</div>
+    </div>
+  `).join("") : `<div class="empty-state"><div class="es-icon">&#10022;</div><h4>No active reports</h4></div>`;
+
+  const [lost, found] = await Promise.all([api("/lost"), api("/found")]);
+  allRecords = [...lost.map(i=>({...i,type:'LOST'})), ...found.map(i=>({...i,type:'FOUND'}))];
+  renderRecords("ALL");
+}
+
+function renderRecords(filter) {
+  const list = filter === "ALL" ? allRecords : allRecords.filter(r => r.type === filter);
+  document.getElementById("recordsBody").innerHTML = `
+    <table><thead><tr><th>ID</th><th>Type</th><th>Item</th><th>Location</th><th>Status</th><th>Change status</th></tr></thead>
+    <tbody>${list.slice().reverse().map(it => `
+      <tr>
+        <td class="mono">${it.itemId}</td>
+        <td><span class="badge ${it.type==='LOST'?'badge-unlikely':'badge-strong'}">${it.type}</span></td>
+        <td>${escapeHtml(it.itemName)}</td>
+        <td>${escapeHtml(it.location)}</td>
+        <td><span class="badge ${statusBadgeClass(it.status)}">${it.status}</span></td>
+        <td>
+          <select class="btn-sm" data-id="${it.itemId}" style="font-size:11px;padding:4px">
+            ${['ACTIVE','MATCHED','RETURNED','CLOSED'].map(s=>`<option ${s===it.status?'selected':''}>${s}</option>`).join("")}
+          </select>
+        </td>
+      </tr>`).join("")}</tbody></table>
+  `;
+  document.querySelectorAll("select[data-id]").forEach(sel => sel.addEventListener("change", async () => {
+    try {
+      await api(`/items/${sel.dataset.id}/status`, { method: "PUT", body: JSON.stringify({ status: sel.value }) });
+      toast("Status updated", "success");
+    } catch (e) { toast(e.message, "error"); }
+  }));
+}
+
+document.getElementById("recordFilters").addEventListener("click", (e) => {
+  if (e.target.tagName !== "BUTTON") return;
+  document.querySelectorAll("#recordFilters button").forEach(b => b.classList.remove("active"));
+  e.target.classList.add("active");
+  renderRecords(e.target.dataset.f);
+});
+
+load().catch(e => toast(e.message, "error"));
+</script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report Lost Item — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+const content = renderShell("report-lost.html", "Report a Lost Item", "The more detail you give, the sharper CampusMatch's comparison will be.");
+
+content.innerHTML = `
+  <div class="grid-2">
+    <div class="panel panel-pad">
+      <div id="formArea"></div>
+    </div>
+    <div>
+      <div class="panel panel-pad">
+        <div class="section-title" style="margin-top:0">Why detail helps</div>
+        <p class="muted" style="font-size:13px;line-height:1.6">
+          CampusMatch compares name, category, color, brand, location, date, description and your unique
+          feature — each weighted differently. A specific <strong>unique identifying feature</strong>
+          (a scratch, sticker, broken zipper) is what separates your item from every other black backpack on campus.
+        </p>
+      </div>
+      <div id="resultArea" style="margin-top:16px"></div>
+    </div>
+  </div>
+`;
+
+function formHtml() {
+  return `
+    <form id="lostForm">
+      <div class="form-grid">
+        <div class="field"><label>Item Name *</label><input type="text" id="itemName" required placeholder="e.g. Backpack"></div>
+        <div class="field"><label>Category *</label>
+          <select id="category" required>
+            <option value="">Select…</option>
+            <option>Electronics</option><option>Bags</option><option>ID / Documents</option>
+            <option>Wallet</option><option>Jewelry</option><option>Books</option>
+            <option>Clothing</option><option>Keys</option><option>Other</option>
+          </select>
+        </div>
+        <div class="field"><label>Color</label><input type="text" id="color" placeholder="e.g. Black"></div>
+        <div class="field"><label>Brand</label><input type="text" id="brand" placeholder="e.g. Samsung"></div>
+        <div class="field"><label>Location Lost *</label><input type="text" id="location" required placeholder="e.g. Library"></div>
+        <div class="field"><label>Date Lost</label><input type="date" id="date"></div>
+        <div class="field"><label>Approximate Time</label><input type="time" id="time"></div>
+        <div class="field"><label>Contact Preference</label>
+          <select id="contactPreference"><option>In-app</option><option>Email</option><option>Phone</option></select>
+        </div>
+      </div>
+      <div class="field"><label>Description</label><textarea id="description" placeholder="Describe the item in your own words…"></textarea></div>
+      <div class="field">
+        <label>Unique Identifying Feature</label>
+        <input type="text" id="uniqueFeature" placeholder="e.g. One broken zipper on the front pocket">
+        <div class="hint">What could prove this item belongs to you? Scratch, sticker, engraving, keychain…</div>
+      </div>
+      <div class="field">
+        <label>Photo (optional)</label>
+        <input type="file" id="itemPhoto" accept="image/*">
+        <div class="hint">CampusMatch compares this photo against found-item photos using real perceptual image hashing.</div>
+        <img id="photoPreview" style="display:none;max-width:160px;border-radius:8px;margin-top:8px;border:1px solid var(--line)">
+      </div>
+      <button type="submit" class="btn btn-primary" id="submitBtn">Submit Lost Report</button>
+    </form>
+  `;
+}
+document.getElementById("formArea").innerHTML = formHtml();
+
+document.getElementById("itemPhoto").addEventListener("change", async () => {
+  const dataUrl = await readImageAsDataUrl(document.getElementById("itemPhoto"));
+  const preview = document.getElementById("photoPreview");
+  if (dataUrl) { preview.src = dataUrl; preview.style.display = "block"; }
+  else { preview.style.display = "none"; }
+});
+
+async function payload() {
+  return {
+    itemName: document.getElementById("itemName").value.trim(),
+    category: document.getElementById("category").value,
+    color: document.getElementById("color").value.trim(),
+    brand: document.getElementById("brand").value.trim(),
+    location: document.getElementById("location").value.trim(),
+    date: formatDate(document.getElementById("date").value),
+    time: document.getElementById("time").value,
+    description: document.getElementById("description").value.trim(),
+    uniqueFeature: document.getElementById("uniqueFeature").value.trim(),
+    contactPreference: document.getElementById("contactPreference").value,
+    imageBase64: await readImageAsDataUrl(document.getElementById("itemPhoto"))
+  };
+}
+function formatDate(iso) {
+  if (!iso) return "";
+  const [y,m,d] = iso.split("-");
+  return `${d}-${m}-${y}`;
+}
+
+async function submitLost(force) {
+  const body = await payload();
+  body.forceCreate = !!force;
+  const resultArea = document.getElementById("resultArea");
+  try {
+    const res = await api("/lost", { method: "POST", body: JSON.stringify(body) });
+    if (res.duplicate) {
+      resultArea.innerHTML = `
+        <div class="panel panel-pad">
+          <div class="error-banner" style="margin-bottom:12px">&#9888; Possible duplicate report detected — ${res.warning.similarity}% similar to <strong>${res.warning.existingReportId}</strong>.</div>
+          <p style="font-size:13px" class="muted">${escapeHtml(res.warning.message)}</p>
+          <div style="display:flex;gap:10px;margin-top:10px">
+            <a class="btn btn-outline btn-sm" href="my-reports.html">View Existing</a>
+            <button class="btn btn-primary btn-sm" id="continueAnywayBtn">Continue Anyway</button>
+            <button class="btn btn-ghost btn-sm" id="cancelBtn">Cancel</button>
+          </div>
+        </div>`;
+      document.getElementById("continueAnywayBtn").onclick = () => submitLost(true);
+      document.getElementById("cancelBtn").onclick = () => { resultArea.innerHTML = ""; };
+      return;
+    }
+    toast("Lost report " + res.item.itemId + " created.", "success");
+    let matchesHtml = "";
+    if (res.matches && res.matches.length) {
+      matchesHtml = res.matches.slice(0,3).map(m => `
+        <div class="match-card">
+          ${scoreRingSVG(m.score, 56)}
+          <div class="mc-body">
+            <div class="mc-title">${m.targetId}</div>
+            <div class="mc-meta"><span class="badge ${confidenceBadgeClass(m.confidence)}">${m.confidence}</span></div>
+          </div>
+          <a class="btn btn-sm btn-primary" href="match-details.html?lostId=${res.item.itemId}&foundId=${m.targetId}">View</a>
+        </div>`).join("");
+    }
+    resultArea.innerHTML = `
+      <div class="panel panel-pad">
+        <div class="success-banner">Report <strong>${res.item.itemId}</strong> saved.</div>
+        ${res.matches && res.matches.length ? `<div class="section-title" style="margin-top:6px">${res.matches.length} Possible Match${res.matches.length>1?"es":""} Found</div>${matchesHtml}` :
+        `<div class="empty-state"><div class="es-icon">&#10022;</div><h4>No matches yet</h4><div>We'll notify you the moment a found item matches.</div></div>`}
+      </div>`;
+    document.getElementById("lostForm").reset();
+  } catch (err) {
+    resultArea.innerHTML = `<div class="error-banner">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+document.getElementById("lostForm").addEventListener("submit", (e) => { e.preventDefault(); submitLost(false); });
+</script>
+</body>
+</html>

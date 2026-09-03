@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>History — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+const content = renderShell("history.html", "Claim &amp; Recovery History", "Every step of every item's journey, in order.");
+content.innerHTML = `<div class="panel panel-pad" id="body"><div class="muted">Loading…</div></div>`;
+
+async function load() {
+  const [hist, claims] = await Promise.all([api("/history"), api("/claims")]);
+  const byItem = {};
+  hist.forEach(h => { (byItem[h.itemId] = byItem[h.itemId] || []).push(h); });
+
+  const claimTable = `
+    <div class="section-title" style="margin-top:0">Claim History</div>
+    <table style="margin-bottom:26px"><thead><tr>
+      <th>Claim</th><th>Lost</th><th>Found</th><th>Match</th><th>Ownership</th><th>Status</th><th>Decision Date</th>
+    </tr></thead><tbody>
+      ${claims.length ? claims.slice().reverse().map(c => `
+        <tr>
+          <td class="mono">${c.claimId}</td><td class="mono">${c.lostItemId}</td><td class="mono">${c.foundItemId}</td>
+          <td>${c.matchScore}%</td><td>${c.ownershipScore >= 0 ? c.ownershipScore + "%" : "—"}</td>
+          <td><span class="badge ${statusBadgeClass(c.status.toUpperCase())}">${c.status}</span></td>
+          <td class="mono">${c.decisionDate || "—"}</td>
+        </tr>`).join("") : `<tr><td colspan="7" class="muted" style="padding:16px">No claims yet.</td></tr>`}
+    </tbody></table>`;
+
+  const timelineHtml = Object.keys(byItem).slice(-6).reverse().map(itemId => `
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-head"><h3>${itemId}</h3></div>
+      <div class="panel-pad">
+        <div class="timeline">
+          ${byItem[itemId].map(h => `<div class="tl-item"><div class="tl-time">${escapeHtml(h.timestamp)}</div><div class="tl-text">${escapeHtml(h.eventText)}</div></div>`).join("")}
+        </div>
+      </div>
+    </div>`).join("");
+
+  document.getElementById("body").outerHTML = `
+    <div class="panel panel-pad">${claimTable}</div>
+    <div class="section-title">Item Recovery Timelines</div>
+    ${timelineHtml || `<div class="panel panel-pad"><div class="empty-state"><div class="es-icon">&#8635;</div><h4>No activity yet</h4></div></div>`}
+  `;
+}
+load().catch(e => toast(e.message, "error"));
+</script>
+</body>
+</html>

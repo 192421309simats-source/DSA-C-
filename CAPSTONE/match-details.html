@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Match Details — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<script src="js/app.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const lostId = params.get("lostId"), foundId = params.get("foundId");
+const content = renderShell("smart-matching.html", "Match Comparison", `${lostId || ""} &harr; ${foundId || ""}`);
+content.innerHTML = `<div id="body"><div class="muted">Loading comparison…</div></div>`;
+
+function cell(label, lostVal, foundVal, ok) {
+  return `<div>${label}</div><div>${escapeHtml(lostVal || "—")} ${ok ? "&#10003;" : ""}</div><div>${escapeHtml(foundVal || "—")} ${ok ? "&#10003;" : ""}</div>`;
+}
+
+async function load() {
+  const [lost, found, matches] = await Promise.all([
+    api("/lost/" + lostId), api("/found/" + foundId), api("/matches/" + lostId)
+  ]);
+  const m = matches.find(x => x.targetId === foundId) || matches[0];
+
+  const attrByName = {};
+  m.breakdown.forEach(a => attrByName[a.attribute] = a);
+
+  const rows = [
+    ["Item Name", lost.itemName, found.itemName, "Item Name"],
+    ["Category", lost.category, found.category, "Category"],
+    ["Color", lost.color, found.color, "Color"],
+    ["Brand", lost.brand, found.brand, "Brand"],
+    ["Location", lost.location, found.location, "Location"],
+    ["Date", lost.date, found.date, "Date"],
+    ["Description", lost.description, found.description, "Description"],
+    ["Feature", lost.uniqueFeature, found.uniqueFeature, "Unique Feature"],
+  ];
+
+  const imageRow = (lost.hasImage || found.hasImage) ? `
+    <div style="display:flex;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line)">
+      <div style="flex:1;text-align:center">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;margin-bottom:6px">Lost Item Photo</div>
+        ${lost.hasImage ? `<img src="/api/image/${lost.itemId}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--line)">` : `<div class="muted" style="font-size:12px">No photo</div>`}
+      </div>
+      <div style="flex:1;text-align:center">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;margin-bottom:6px">Found Item Photo</div>
+        ${found.hasImage ? `<img src="/api/image/${found.itemId}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--line)">` : `<div class="muted" style="font-size:12px">No photo</div>`}
+      </div>
+    </div>` : "";
+
+  document.getElementById("body").innerHTML = `
+    <div class="grid-2">
+      <div>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-head"><h3>Side-by-Side Comparison</h3></div>
+          ${imageRow}
+          <div class="panel-pad">
+            <div class="compare-grid">
+              <div class="head"></div><div class="head">LOST ITEM</div><div class="head">FOUND ITEM</div>
+              ${rows.map(r => cell(r[0], r[1], r[2], attrByName[r[3]] && attrByName[r[3]].matched)).join("")}
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Why CampusMatch Selected This</h3></div>
+          <div class="panel-pad">
+            ${m.reasons.map(r => `<div style="font-size:13.5px;margin-bottom:6px">&#10003; ${escapeHtml(r)}</div>`).join("") || `<div class="muted">No strong attribute matches.</div>`}
+            <div class="divider"></div>
+            <div class="section-title" style="margin-top:0">Attribute Breakdown</div>
+            ${m.breakdown.map(a => `
+              <div class="attr-row">
+                <div class="attr-name">${a.attribute}</div>
+                <div class="attr-bar"><span style="width:${(a.scored/a.max)*100}%"></span></div>
+                <div class="attr-val">${a.scored}/${a.max}</div>
+                <div class="attr-check">${a.matched ? "&#10003;" : ""}</div>
+              </div>`).join("")}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel panel-pad" style="text-align:center">
+          ${scoreRingSVG(m.score, 110)}
+          <div style="margin-top:12px"><span class="badge ${confidenceBadgeClass(m.confidence)}">${m.confidence}</span></div>
+          <div class="muted" style="font-size:12px;margin-top:10px">FINAL SCORE: ${m.score}%</div>
+          <div class="divider"></div>
+          <button class="btn btn-primary btn-block" id="claimBtn">Submit Claim for this Match</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("claimBtn").onclick = () => {
+    window.location.href = `claims.html?action=new&lostId=${lostId}&foundId=${foundId}`;
+  };
+}
+load().catch(e => document.getElementById("body").innerHTML = `<div class="error-banner">${escapeHtml(e.message)}</div>`);
+</script>
+</body>
+</html>

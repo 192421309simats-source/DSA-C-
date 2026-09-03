@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administrator Sign In — CampusFind AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .admin-login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(900px 500px at 15% -10%, #c8862b22, transparent),
+                radial-gradient(700px 500px at 110% 10%, #ffffff10, transparent), #16130d; }
+  .admin-login-card { width: 380px; background: #201b13; border: 1px solid #3a3122; border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5); padding: 34px 30px; color: #f3ede0; }
+  .admin-login-brand { display:flex; align-items:center; gap:10px; margin-bottom: 4px; justify-content:center; }
+  .admin-login-brand .glyph { font-family: var(--serif); font-weight: 700; font-size: 22px; background: var(--amber); color:#2a1e08; width: 38px; height:38px; border-radius:9px; display:flex; align-items:center; justify-content:center; }
+  .admin-login-brand .name { font-family: var(--serif); font-size: 21px; font-weight: 700; color:#f3ede0; }
+  .admin-login-tag { text-align:center; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--amber); margin-bottom: 26px; font-weight:700; }
+  .admin-login-card .field label { color: #c9bfa8; }
+  .admin-login-card input { background: #16130d; border-color: #3a3122; color: #f3ede0; }
+  .admin-login-card input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px #c8862b33; }
+  .admin-login-card .btn-primary { background: var(--amber); color:#2a1e08; }
+  .admin-login-card .btn-primary:hover { background:#dea043; }
+  .admin-back { text-align:center;margin-bottom:14px; }
+  .admin-back a { font-size:12px;color:#a89877;text-decoration:none }
+  .admin-demo { font-size: 11px; color: #a89877; text-align:center; margin-top:16px; line-height:1.5; }
+  .admin-demo code { background: #2a2118; padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color:#f3ede0; }
+  .admin-demo a { color: var(--amber); }
+</style>
+</head>
+<body>
+<div class="admin-login-wrap">
+  <div class="admin-login-card">
+    <div class="admin-back"><a href="index.html">&larr; Back</a></div>
+    <div class="admin-login-brand"><span class="glyph">C</span><span class="name">CampusFind AI</span></div>
+    <div class="admin-login-tag">Administrator Access Only</div>
+
+    <div id="errorBox"></div>
+
+    <form id="loginForm">
+      <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="admin@campusfind.edu" required></div>
+      <div class="field"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••" required></div>
+      <button type="submit" class="btn btn-primary btn-block">Sign in as Administrator</button>
+    </form>
+
+    <div class="admin-demo">
+      Demo admin: <code>admin@campusfind.edu</code> / <code>admin123</code><br>
+      Not an administrator? <a href="student-login.html">Student/Staff sign-in</a>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  if (Auth.user) window.location.href = "dashboard.html";
+
+  const errorBox = document.getElementById("errorBox");
+  function showError(msg) { errorBox.innerHTML = `<div class="error-banner">${escapeHtml(msg)}</div>`; }
+
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.innerHTML = "";
+    try {
+      const data = await api("/login", { method: "POST", body: JSON.stringify({
+        email: document.getElementById("loginEmail").value.trim(),
+        password: document.getElementById("loginPassword").value,
+        expectedRole: "ADMIN" // server rejects non-admin accounts on this portal
+      })});
+      Auth.user = data;
+      window.location.href = "admin.html";
+    } catch (err) { showError(err.message); }
+  });
+</script>
+</body>
+</html>
